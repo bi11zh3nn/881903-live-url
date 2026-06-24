@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 import { chromium } from "playwright";
+import { extractM3u8FromScript } from "./browser-utils";
 import {
   DEFAULT_CHANNEL,
   extractLiveJsUrl,
@@ -112,16 +113,16 @@ const main = async () => {
     const playlistResponsePromise = page.waitForResponse(
       (response) => response.url().includes("playlist.js") && response.ok(),
       { timeout: 15000 }
-    );
+    ).catch(() => null);
     const m3u8ResponsePromise = page.waitForResponse(
       (response) => response.url().includes(".m3u8") && response.ok(),
       { timeout: 15000 }
-    );
+    ).catch(() => null);
 
-    await page.goto(liveUrl, { waitUntil: "networkidle" });
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
 
-    try {
-      const m3u8Response = await m3u8ResponsePromise;
+    const m3u8Response = await m3u8ResponsePromise;
+    if (m3u8Response) {
       const m3u8Url = m3u8Response.url();
       if (play) {
         await playStream(m3u8Url, page, liveUrl);
@@ -133,15 +134,13 @@ const main = async () => {
         process.stdout.write(`${m3u8Url}\n`);
       }
       return;
-    } catch {
-      // Fall back to playlist.js parsing below.
     }
 
     let playlistJs = "";
-    try {
-      const playlistResponse = await playlistResponsePromise;
+    const playlistResponse = await playlistResponsePromise;
+    if (playlistResponse) {
       playlistJs = await playlistResponse.text();
-    } catch {
+    } else {
       const html = await page.content();
 
       const liveJsUrl = assertNonNull(
@@ -169,7 +168,7 @@ const main = async () => {
     }
 
     const m3u8Url = assertNonNull(
-      extractM3u8Url(playlistJs),
+      extractM3u8Url(playlistJs) ?? await extractM3u8FromScript(page, playlistJs),
       "Failed to extract .m3u8 URL from playlist.js."
     );
 

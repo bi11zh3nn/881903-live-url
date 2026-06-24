@@ -3,7 +3,7 @@ import { getStreamUrlCached } from "./cache.js";
 import { type Channel } from "./stream-utils.js";
 import { renderHomePage } from "./home.js";
 
-const DEFAULT_PORT = 3000;
+const DEFAULT_PORT = 38819;
 
 const parseChannel = (pathname: string): Channel | null => {
   const match = pathname.match(/^\/live\/(903|881)$/);
@@ -81,6 +81,7 @@ const handleRequest = async (request: Request) => {
 
 Bun.serve({
   port: getPort(),
+  idleTimeout: 120,
   fetch: handleRequest
 });
 

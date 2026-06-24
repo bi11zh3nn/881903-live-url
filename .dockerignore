@@ -1,0 +1,14 @@
+.git
+.agents
+.codex
+.claude
+.idea
+.vercel
+node_modules
+dist
+coverage
+logs
+*.log
+.DS_Store
+.env
+.env.*

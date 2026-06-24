@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { extractM3u8FromScript } from "./browser-utils.js";
 import { extractLiveJsUrl, extractM3u8Url, LIVE_URLS, type Channel } from "./stream-utils.js";
 
 export type StreamFetchResult = {
@@ -46,33 +47,31 @@ export const fetchStreamUrl = async (channel: Channel): Promise<StreamFetchResul
     const playlistResponsePromise = page.waitForResponse(
       (response) => response.url().includes("playlist.js") && response.ok(),
       { timeout: 15000 }
-    );
+    ).catch(() => null);
     const m3u8ResponsePromise = page.waitForResponse(
       (response) => response.url().includes(".m3u8") && response.ok(),
       { timeout: 15000 }
-    );
+    ).catch(() => null);
 
-    await page.goto(liveUrl, { waitUntil: "networkidle" });
+    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
 
-    try {
-      const m3u8Response = await m3u8ResponsePromise;
+    const m3u8Response = await m3u8ResponsePromise;
+    if (m3u8Response) {
       return {
         url: m3u8Response.url(),
         fetchedAtMs: Date.now()
       };
-    } catch {
-      // Fall back to playlist.js parsing below.
     }
 
     let playlistJs = "";
-    try {
-      const playlistResponse = await playlistResponsePromise;
+    const playlistResponse = await playlistResponsePromise;
+    if (playlistResponse) {
       playlistJs = await playlistResponse.text();
-    } catch {
+    } else {
       playlistJs = await fetchPlaylistJs(page, liveUrl);
     }
 
-    const m3u8Url = extractM3u8Url(playlistJs);
+    const m3u8Url = extractM3u8Url(playlistJs) ?? await extractM3u8FromScript(page, playlistJs);
     if (!m3u8Url) {
       throw new Error("Failed to extract .m3u8 URL from playlist.js.");
     }

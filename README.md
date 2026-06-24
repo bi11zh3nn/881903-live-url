@@ -13,6 +13,43 @@ Fetch the current 881903 live stream `.m3u8` URL or play it directly. Includes a
 bun install
 ```
 
+## Docker
+
+Build and run the local server with the existing Bun + Playwright dependencies:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+- `http://localhost:38819/`
+- `http://localhost:38819/live/903`
+- `http://localhost:38819/live/881`
+
+One-off CLI usage through Docker:
+
+```bash
+docker compose run --rm app bun run ./src/get-stream-url.ts --channel 903 --json
+```
+
+### GitHub Container Registry
+
+This repo includes a GitHub Actions workflow that publishes the Docker image to GHCR on
+pushes to `main`, version tags like `v1.0.0`, or manual workflow runs.
+
+After pushing to your fork, the image will be available as:
+
+```bash
+ghcr.io/<your-github-user>/881903-live-url:main
+```
+
+Run the published image locally:
+
+```bash
+docker run --rm -p 38819:38819 ghcr.io/<your-github-user>/881903-live-url:main
+```
+
 ## CLI Usage
 
 Plain URL:

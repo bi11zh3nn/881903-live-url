@@ -1,0 +1,8 @@
+services:
+  app:
+    build: .
+    init: true
+    ports:
+      - "38819:38819"
+    environment:
+      PORT: "38819"

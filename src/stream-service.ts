@@ -4,7 +4,17 @@ import { extractLiveJsUrl, extractM3u8Url, LIVE_URLS, type Channel } from "./str
 
 export type StreamFetchResult = {
   url: string;
+  cookieHeader: string;
   fetchedAtMs: number;
+  referer: string;
+  userAgent: string;
+};
+
+const buildCookieHeader = (cookies: Array<{ name: string; value: string }>) => {
+  if (!cookies.length) {
+    return "";
+  }
+  return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 };
 
 const fetchPlaylistJs = async (page: import("playwright").Page, liveUrl: string) => {
@@ -57,9 +67,15 @@ export const fetchStreamUrl = async (channel: Channel): Promise<StreamFetchResul
 
     const m3u8Response = await m3u8ResponsePromise;
     if (m3u8Response) {
+      const m3u8Url = m3u8Response.url();
+      const userAgent = await page.evaluate(() => navigator.userAgent);
+      const cookies = await page.context().cookies();
       return {
-        url: m3u8Response.url(),
-        fetchedAtMs: Date.now()
+        url: m3u8Url,
+        cookieHeader: buildCookieHeader(cookies),
+        fetchedAtMs: Date.now(),
+        referer: liveUrl,
+        userAgent
       };
     }
 
@@ -76,9 +92,15 @@ export const fetchStreamUrl = async (channel: Channel): Promise<StreamFetchResul
       throw new Error("Failed to extract .m3u8 URL from playlist.js.");
     }
 
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    const cookies = await page.context().cookies();
+
     return {
       url: m3u8Url,
-      fetchedAtMs: Date.now()
+      cookieHeader: buildCookieHeader(cookies),
+      fetchedAtMs: Date.now(),
+      referer: liveUrl,
+      userAgent
     };
   } finally {
     if (browser.isConnected()) {

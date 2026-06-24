@@ -27,6 +27,9 @@ Then open:
 - `http://localhost:38819/live/903`
 - `http://localhost:38819/live/881`
 
+The server relays HLS playlists and media through `/proxy/*`, so clients do not need the
+remote stream cookies or signed query parameters.
+
 One-off CLI usage through Docker:
 
 ```bash
@@ -87,10 +90,12 @@ bun run server
 Endpoints:
 
 - `GET /` Home page that fetches current stream URLs.
-- `GET /live/903` Redirects to the current `.m3u8` for channel 903.
-- `GET /live/881` Redirects to the current `.m3u8` for channel 881.
-- `GET /live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
-- `GET /live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
+- `GET /live/903` Redirects to the proxied `.m3u8` for channel 903.
+- `GET /live/881` Redirects to the proxied `.m3u8` for channel 881.
+- `GET /live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is a local proxy URL.
+- `GET /live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is a local proxy URL.
+- `GET /proxy/903?url=...` Relays 903 playlists and media segments with server-side stream headers/cookies.
+- `GET /proxy/881?url=...` Relays 881 playlists and media segments with server-side stream headers/cookies.
 
 Caching:
 

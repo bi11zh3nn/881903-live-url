@@ -5,8 +5,11 @@ const CACHE_TTL_MS = 10 * 60 * 1000;
 
 export type CacheEntry = {
   url: string;
+  cookieHeader: string;
   fetchedAtMs: number;
   expiresAtMs: number;
+  referer: string;
+  userAgent: string;
   cached: boolean;
 };
 
@@ -16,8 +19,11 @@ const inflight = new Map<Channel, Promise<CacheEntry>>();
 const buildEntry = (result: StreamFetchResult, cached: boolean): CacheEntry => {
   return {
     url: result.url,
+    cookieHeader: result.cookieHeader,
     fetchedAtMs: result.fetchedAtMs,
     expiresAtMs: result.fetchedAtMs + CACHE_TTL_MS,
+    referer: result.referer,
+    userAgent: result.userAgent,
     cached
   };
 };

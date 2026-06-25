@@ -8,14 +8,54 @@ const M3U8_CONTENT_TYPES = new Set([
   "audio/x-mpegurl"
 ]);
 
-const ALLOWED_PROXY_HOSTS = new Set([
-  "live-s.881903.com",
-  "live2-s.881903.com"
-]);
+type ResourceEntry = {
+  channel: Channel;
+  url: string;
+  expiresAtMs: number;
+};
 
-const buildProxyUrl = (requestUrl: string, channel: Channel, targetUrl: string) => {
-  const url = new URL(`/proxy/${channel}`, requestUrl);
-  url.searchParams.set("url", targetUrl);
+const resourceCache = new Map<string, ResourceEntry>();
+const urlTokens = new Map<string, string>();
+
+const buildTokenKey = (channel: Channel, targetUrl: string) => `${channel}\n${targetUrl}`;
+
+const createResourceToken = (channel: Channel, targetUrl: string, expiresAtMs: number) => {
+  const key = buildTokenKey(channel, targetUrl);
+  const existing = urlTokens.get(key);
+  if (existing) {
+    const existingEntry = resourceCache.get(existing);
+    if (existingEntry && existingEntry.expiresAtMs > Date.now()) {
+      existingEntry.expiresAtMs = Math.max(existingEntry.expiresAtMs, expiresAtMs);
+      return existing;
+    }
+  }
+
+  const token = crypto.randomUUID();
+  resourceCache.set(token, { channel, url: targetUrl, expiresAtMs });
+  urlTokens.set(key, token);
+  return token;
+};
+
+const getPathExtension = (targetUrl: string) => {
+  const pathname = new URL(targetUrl).pathname;
+  const lastSegment = pathname.split("/").pop() ?? "";
+  const match = lastSegment.match(/\.([A-Za-z0-9]+)$/);
+  return match ? `.${match[1]}` : "";
+};
+
+const getProxyExtension = (targetUrl: string, fallbackExtension: string) => {
+  return getPathExtension(targetUrl) || fallbackExtension;
+};
+
+const buildProxyUrl = (
+  requestUrl: string,
+  channel: Channel,
+  targetUrl: string,
+  expiresAtMs: number,
+  fallbackExtension: string
+) => {
+  const token = createResourceToken(channel, targetUrl, expiresAtMs);
+  const url = new URL(`/hls/${channel}/${token}${getProxyExtension(targetUrl, fallbackExtension)}`, requestUrl);
   return url.toString();
 };
 
@@ -31,21 +71,48 @@ const rewriteUriAttributes = (
   line: string,
   baseUrl: string,
   requestUrl: string,
-  channel: Channel
+  channel: Channel,
+  expiresAtMs: number
 ) => {
   return line.replace(/URI="([^"]+)"/g, (_match, uri: string) => {
     const targetUrl = new URL(uri, baseUrl).toString();
-    return `URI="${buildProxyUrl(requestUrl, channel, targetUrl)}"`;
+    return `URI="${buildProxyUrl(requestUrl, channel, targetUrl, expiresAtMs, ".key")}"`;
   });
 };
 
-const rewritePlaylist = (body: string, baseUrl: string, requestUrl: string, channel: Channel) => {
+const rewritePlaylist = (
+  body: string,
+  baseUrl: string,
+  requestUrl: string,
+  channel: Channel,
+  expiresAtMs: number
+) => {
+  let nextResourceExtension = ".m3u8";
+
   return body.split("\n").map((line) => {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#EXT-X-STREAM-INF")) {
+      nextResourceExtension = ".m3u8";
+      return rewriteUriAttributes(line, baseUrl, requestUrl, channel, expiresAtMs);
+    }
+    if (trimmed.startsWith("#EXTINF")) {
+      nextResourceExtension = ".aac";
+      return rewriteUriAttributes(line, baseUrl, requestUrl, channel, expiresAtMs);
+    }
+
     const targetUrl = resolvePlaylistUrl(line, baseUrl);
     if (targetUrl) {
-      return buildProxyUrl(requestUrl, channel, targetUrl);
+      const rewritten = buildProxyUrl(
+        requestUrl,
+        channel,
+        targetUrl,
+        expiresAtMs,
+        nextResourceExtension
+      );
+      nextResourceExtension = ".m3u8";
+      return rewritten;
     }
-    return rewriteUriAttributes(line, baseUrl, requestUrl, channel);
+    return rewriteUriAttributes(line, baseUrl, requestUrl, channel, expiresAtMs);
   }).join("\n");
 };
 
@@ -85,8 +152,23 @@ const buildProxyHeaders = (contentType: string) => {
   };
 };
 
-export const getInitialProxyUrl = (requestUrl: string, channel: Channel, entry: CacheEntry) => {
-  return buildProxyUrl(requestUrl, channel, entry.url);
+export const getLiveUrl = (requestUrl: string, channel: Channel) => {
+  return new URL(`/live/${channel}`, requestUrl).toString();
+};
+
+const getResource = (channel: Channel, token: string) => {
+  const resource = resourceCache.get(token);
+  if (!resource || resource.channel !== channel) {
+    return null;
+  }
+
+  if (resource.expiresAtMs <= Date.now()) {
+    resourceCache.delete(token);
+    urlTokens.delete(buildTokenKey(resource.channel, resource.url));
+    return null;
+  }
+
+  return resource;
 };
 
 export const proxyStreamResource = async (
@@ -95,11 +177,6 @@ export const proxyStreamResource = async (
   entry: CacheEntry,
   targetUrl: string
 ) => {
-  const parsedTargetUrl = new URL(targetUrl);
-  if (!ALLOWED_PROXY_HOSTS.has(parsedTargetUrl.hostname)) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
   const response = await fetch(targetUrl, {
     headers: buildRemoteHeaders(entry),
     redirect: "follow"
@@ -116,7 +193,13 @@ export const proxyStreamResource = async (
 
   if (isPlaylistResponse(response, response.url || targetUrl)) {
     const body = await response.text();
-    const rewritten = rewritePlaylist(body, response.url || targetUrl, request.url, channel);
+    const rewritten = rewritePlaylist(
+      body,
+      response.url || targetUrl,
+      request.url,
+      channel,
+      entry.expiresAtMs
+    );
     return new Response(rewritten, {
       headers: buildProxyHeaders("application/vnd.apple.mpegurl; charset=utf-8")
     });
@@ -125,4 +208,25 @@ export const proxyStreamResource = async (
   return new Response(response.body, {
     headers: buildProxyHeaders(contentType)
   });
+};
+
+export const proxyLivePlaylist = async (request: Request, channel: Channel, entry: CacheEntry) => {
+  return proxyStreamResource(request, channel, entry, entry.url);
+};
+
+export const proxyTokenResource = async (
+  request: Request,
+  channel: Channel,
+  entry: CacheEntry,
+  token: string
+) => {
+  const resource = getResource(channel, token);
+  if (!resource) {
+    return new Response(`Stream resource expired. Refresh /live/${channel}.`, {
+      status: 410,
+      headers: buildProxyHeaders("text/plain; charset=utf-8")
+    });
+  }
+
+  return proxyStreamResource(request, channel, entry, resource.url);
 };

@@ -1,6 +1,6 @@
-# 881903 Live URL
+# 881903 Live Relay
 
-Fetch the current 881903 live stream `.m3u8` URL or play it directly. Includes a small web server for sharing `/live/*` endpoints.
+Self-hosted relay for 881903 live HLS streams. The server fetches the current upstream stream URL and required cookies internally, then serves a local `/live/*` playlist whose media resources are proxied through this app.
 
 ## Requirements
 
@@ -27,8 +27,8 @@ Then open:
 - `http://localhost:38819/live/903`
 - `http://localhost:38819/live/881`
 
-The server relays HLS playlists and media through `/proxy/*`, so clients do not need the
-remote stream cookies or signed query parameters.
+The server relays HLS playlists and media through opaque `/hls/*` URLs, so clients do not
+see the upstream stream URL and do not need remote cookies or signed query parameters.
 
 One-off CLI usage through Docker:
 
@@ -79,7 +79,7 @@ Help:
 bun run ./src/get-stream-url.ts --help
 ```
 
-## Server (local)
+## Server
 
 Start the server:
 
@@ -89,42 +89,16 @@ bun run server
 
 Endpoints:
 
-- `GET /` Home page that fetches current stream URLs.
-- `GET /live/903` Redirects to the proxied `.m3u8` for channel 903.
-- `GET /live/881` Redirects to the proxied `.m3u8` for channel 881.
-- `GET /live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is a local proxy URL.
-- `GET /live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is a local proxy URL.
-- `GET /proxy/903?url=...` Relays 903 playlists and media segments with server-side stream headers/cookies.
-- `GET /proxy/881?url=...` Relays 881 playlists and media segments with server-side stream headers/cookies.
+- `GET /` Home page that shows local playback URLs.
+- `GET /live/903` Returns a proxied `.m3u8` playlist for channel 903.
+- `GET /live/881` Returns a proxied `.m3u8` playlist for channel 881.
+- `GET /live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is the local `/live/903` playback URL.
+- `GET /live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }` where `url` is the local `/live/881` playback URL.
+- `GET /hls/:channel/:token` Relays playlists, media segments, and keys through server-side headers/cookies. Tokens are internal and expire with the stream cache.
 
 Caching:
 
 - Stream URLs are cached for 10 minutes in-memory.
-
-## Vercel
-
-This project includes a Vercel-ready serverless function under `api/`.
-
-Vercel endpoints:
-
-- `GET /` Home page (rewritten to `/api`).
-- `GET /live/903` Redirects to the current `.m3u8` for channel 903.
-- `GET /live/881` Redirects to the current `.m3u8` for channel 881.
-- `GET /live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
-- `GET /live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
-
-Direct API endpoints:
-
-- `GET /api` Home page.
-- `GET /api/live/903` Redirects to the current `.m3u8` for channel 903.
-- `GET /api/live/881` Redirects to the current `.m3u8` for channel 881.
-- `GET /api/live/903?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
-- `GET /api/live/881?format=json` Returns JSON `{ channel, url, cached, fetchedAtMs, expiresAtMs }`.
-
-Notes:
-
-- Uses `playwright-core` + `@sparticuz/chromium` for Vercel serverless compatibility.
-- `vercel.json` sets `maxDuration` to 60s to reduce timeouts.
 
 ## TypeScript linting
 

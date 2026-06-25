@@ -5,10 +5,9 @@ Guidance for automated agents working in this repo.
 ## Stack
 - Runtime: Bun
 - Language: TypeScript (ESM)
-- Browser automation: Playwright (CLI uses full `playwright`; server uses `playwright-core` + `@sparticuz/chromium` for Vercel)
+- Browser automation: Playwright
 - CLI entry: `./src/get-stream-url.ts`
-- Server entry (local): `./src/server.ts`
-- Serverless entry (Vercel): `./api/index.ts`
+- Server entry: `./src/server.ts`
 
 ## Commands
 
@@ -24,6 +23,7 @@ Guidance for automated agents working in this repo.
 
 ### Run Server
 - Local dev server: `bun run server`
+- Docker server: `docker compose up --build`
 
 ### Lint / Typecheck
 - TypeScript lint (typecheck): `bun run lint:ts`
@@ -87,7 +87,10 @@ To install skills (example):
 
 ### Streaming Playback
 - Use `ffplay` only (VLC unsupported).
-- Pass `Referer` and `Cookie` headers to avoid 403 errors.
+- Server playback should use local `/live/:channel` URLs only.
+- Do not expose upstream `.m3u8`, segment, key, signed query, or cookie values to clients.
+- Relay playlists, segments, and keys through opaque `/hls/:channel/:token` URLs.
+- Pass upstream `Referer`, `User-Agent`, and `Cookie` headers from the server-side relay to avoid 403 errors.
 
 ### Caching
 - Server caches stream URLs for 10 minutes.

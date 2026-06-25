@@ -2,7 +2,7 @@
 import { getStreamUrlCached } from "./cache.js";
 import { type Channel } from "./stream-utils.js";
 import { renderHomePage } from "./home.js";
-import { getInitialProxyUrl, proxyStreamResource } from "./proxy.js";
+import { getLiveUrl, proxyLivePlaylist, proxyTokenResource } from "./proxy.js";
 
 const DEFAULT_PORT = 38819;
 
@@ -11,9 +11,14 @@ const parseChannel = (pathname: string): Channel | null => {
   return match ? (match[1] as Channel) : null;
 };
 
-const parseProxyChannel = (pathname: string): Channel | null => {
-  const match = pathname.match(/^\/proxy\/(903|881)$/);
-  return match ? (match[1] as Channel) : null;
+type HlsRoute = {
+  channel: Channel;
+  token: string;
+};
+
+const parseHlsRoute = (pathname: string): HlsRoute | null => {
+  const match = pathname.match(/^\/hls\/(903|881)\/([0-9a-f-]+)(?:\.[A-Za-z0-9]+)?$/);
+  return match ? { channel: match[1] as Channel, token: match[2] } : null;
 };
 
 const getPort = () => {
@@ -51,33 +56,31 @@ const handleLiveRoute = async (request: Request, channel: Channel) => {
   const format = url.searchParams.get("format");
 
   const entry = await getStreamUrlCached(channel);
-  const proxyUrl = getInitialProxyUrl(request.url, channel, entry);
+  const liveUrl = getLiveUrl(request.url, channel);
 
   if (format === "json") {
     return jsonResponse({
       channel,
-      url: proxyUrl,
+      url: liveUrl,
       cached: entry.cached,
       fetchedAtMs: entry.fetchedAtMs,
       expiresAtMs: entry.expiresAtMs
     });
   }
 
-  return Response.redirect(proxyUrl, 302);
+  return proxyLivePlaylist(request, channel, entry);
 };
 
-const handleProxyRoute = async (request: Request, channel: Channel) => {
-  const url = new URL(request.url);
-  const entry = await getStreamUrlCached(channel);
-  const targetUrl = url.searchParams.get("url") ?? entry.url;
+const handleHlsRoute = async (request: Request, route: HlsRoute) => {
+  const entry = await getStreamUrlCached(route.channel);
 
-  return proxyStreamResource(request, channel, entry, targetUrl);
+  return proxyTokenResource(request, route.channel, entry, route.token);
 };
 
 const handleRequest = async (request: Request) => {
   const url = new URL(request.url);
   const channel = parseChannel(url.pathname);
-  const proxyChannel = parseProxyChannel(url.pathname);
+  const hlsRoute = parseHlsRoute(url.pathname);
 
   if (url.pathname === "/") {
     return serveHome();
@@ -92,9 +95,9 @@ const handleRequest = async (request: Request) => {
     }
   }
 
-  if (proxyChannel) {
+  if (hlsRoute) {
     try {
-      return await handleProxyRoute(request, proxyChannel);
+      return await handleHlsRoute(request, hlsRoute);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       return jsonResponse({ error: message }, 500);
@@ -106,6 +109,7 @@ const handleRequest = async (request: Request) => {
 
 Bun.serve({
   port: getPort(),
+  hostname: "0.0.0.0",
   idleTimeout: 120,
   fetch: handleRequest
 });

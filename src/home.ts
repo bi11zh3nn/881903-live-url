@@ -7,7 +7,7 @@ export const renderHomePage = () => {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>881903 Live URLs</title>
+    <title>881903 Live Relay</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -88,8 +88,8 @@ export const renderHomePage = () => {
   </head>
   <body>
     <main>
-      <h1>881903 Live URLs</h1>
-      <p>Fetching live stream URLs for channels ${channels}.</p>
+      <h1>881903 Live Relay</h1>
+      <p>Local playback URLs for channels ${channels}.</p>
       <div class="grid" id="grid"></div>
     </main>
     <script>
@@ -145,7 +145,7 @@ export const renderHomePage = () => {
             status.textContent =
               cachedText + " • fetched " + fetchedAt + " • expires " + expiresAt;
           } catch (error) {
-            status.textContent = "Failed to fetch URL";
+            status.textContent = "Failed to fetch playback URL";
           }
         };
 

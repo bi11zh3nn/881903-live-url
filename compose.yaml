@@ -2,7 +2,22 @@ services:
   app:
     build: .
     init: true
+    mem_limit: 1g
+    pids_limit: 256
     ports:
       - "38819:38819"
     environment:
+      LOG_LEVEL: "info"
       PORT: "38819"
+      KEEPALIVE_INTERVAL_MS: "120000"
+      KEEPALIVE_IDLE_MS: "900000"
+      STREAM_CACHE_TTL_MS: "600000"
+      STREAM_FETCH_TIMEOUT_MS: "25000"
+      HLS_RESOURCE_TTL_MS: "1800000"
+      HLS_RESOURCE_PRUNE_INTERVAL_MS: "300000"
+      MAX_HLS_RESOURCES: "1000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -17,6 +17,10 @@ const buildCookieHeader = (cookies: Array<{ name: string; value: string }>) => {
   return cookies.map((cookie) => `${cookie.name}=${cookie.value}`).join("; ");
 };
 
+const PAGE_GOTO_TIMEOUT_MS = 20 * 1000;
+const PLAYLIST_REQUEST_TIMEOUT_MS = 15 * 1000;
+const BROWSER_LAUNCH_TIMEOUT_MS = 15 * 1000;
+
 const fetchPlaylistJs = async (page: import("playwright").Page, liveUrl: string) => {
   const html = await page.content();
   const liveJsUrl = extractLiveJsUrl(html);
@@ -29,6 +33,7 @@ const fetchPlaylistJs = async (page: import("playwright").Page, liveUrl: string)
 
   const userAgent = await page.evaluate(() => navigator.userAgent);
   const response = await page.request.get(liveJsUrl, {
+    timeout: PLAYLIST_REQUEST_TIMEOUT_MS,
     headers: {
       Referer: liveUrl,
       Origin: "https://www.881903.com",
@@ -50,7 +55,10 @@ export const fetchStreamUrl = async (channel: Channel): Promise<StreamFetchResul
   const liveUrl = LIVE_URLS[channel];
   console.log("[fetchStreamUrl] Starting for channel", channel, "URL:", liveUrl);
 
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    timeout: BROWSER_LAUNCH_TIMEOUT_MS
+  });
   const page = await browser.newPage();
 
   try {
@@ -63,7 +71,10 @@ export const fetchStreamUrl = async (channel: Channel): Promise<StreamFetchResul
       { timeout: 15000 }
     ).catch(() => null);
 
-    await page.goto(liveUrl, { waitUntil: "domcontentloaded" });
+    await page.goto(liveUrl, {
+      waitUntil: "domcontentloaded",
+      timeout: PAGE_GOTO_TIMEOUT_MS
+    });
 
     const m3u8Response = await m3u8ResponsePromise;
     if (m3u8Response) {
